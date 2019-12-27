@@ -1,3 +1,5 @@
+import codecs
+
 from .cell import deserialize_boc, Slice, deserialize_cell_from_json
 
 def render_tvm_element(element_type, element):
@@ -32,18 +34,19 @@ def serialize_tvm_element(t):
   if t["@type"] == "tvm.stackEntryNumber":
     return ["num", hex(int(t["number"]["number"]))]
   elif t["@type"] == "tvm.stackEntrySlice":
-    data = t["slice"]["bytes"]
-    data = codecs.decode(codecs.encode(data,'utf8'), 'base64')
+    data = codecs.encode(t["cell"]["bytes"],'utf8')
+    data = codecs.decode(data, 'base64')
     s = Slice(deserialize_boc(data))
-    return ["slice", s]
+    return ["cell", {'bytes':t["cell"]["bytes"], 'object':s.serialize_to_object()}]
   elif t["@type"] == "tvm.stackEntryCell":
-    data = t["cell"]["bytes"]
-    data = codecs.decode(codecs.encode(data,'utf8'), 'base64')
-    return ["slice", deserialize_boc(data)]
+    data = codecs.encode(t["cell"]["bytes"],'utf8')
+    data = codecs.decode(data, 'base64')
+    cell = deserialize_boc(data)
+    return ["cell", {'bytes':t["cell"]["bytes"], 'object':cell.serialize_to_object()}]
   elif t["@type"] == "tvm.stackEntryTuple":
-    return ["slice", t["tuple"]]
+    return ["tuple", t["tuple"]]
   elif t["@type"] == "tvm.stackEntryList":
-    return ["slice", t["list"]]
+    return ["list", t["list"]]
   else:
     raise Exception("Unknown type")
 

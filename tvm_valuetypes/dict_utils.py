@@ -52,21 +52,23 @@ def deser_hmlabel(ser, m):
     s = v * _len 
   return _len, s, ser
 
-def deser_hashmapnode(cell, m, ret_dict, prefix):
+def deser_hashmapnode(cell, m, ret_dict, prefix, max_elements):
   """
     hmn_leaf#_ {X:Type} value:X = HashmapNode 0 X;
     hmn_fork#_ {n:#} {X:Type} left:^(Hashmap n X) right:^(Hashmap n X) = HashmapNode (n + 1) X;
   """
+  if len(ret_dict)>=max_elements:
+    return
   if m == 0: #leaf
     ret_dict[prefix.to01()] = cell
   else: #fork
     l_prefix, r_prefix = prefix.copy(), prefix.copy()
     l_prefix.append(False)
     r_prefix.append(True)
-    parse_hashmap(cell.refs[0].copy(), m-1, ret_dict, l_prefix)
-    parse_hashmap(cell.refs[1].copy(), m-1, ret_dict, r_prefix)
+    parse_hashmap(cell.refs[0].copy(), m-1, ret_dict, l_prefix, max_elements)
+    parse_hashmap(cell.refs[1].copy(), m-1, ret_dict, r_prefix, max_elements)
 
-def parse_hashmap(cell, bitlength, ret_dict, prefix):
+def parse_hashmap(cell, bitlength, ret_dict, prefix, max_elements = 10000):
   """
     hm_edge#_ {n:#} {X:Type} {l:#} {m:#} label:(HmLabel ~l n)
          {n = (~m) + l} node:(HashmapNode m X) = Hashmap n X;
@@ -74,7 +76,7 @@ def parse_hashmap(cell, bitlength, ret_dict, prefix):
   _len, suffix, cell.data.data = deser_hmlabel(cell.data.data, bitlength)
   prefix.extend(suffix)
   m = bitlength - _len
-  deser_hashmapnode(cell.copy(), m, ret_dict, prefix.copy())
+  deser_hashmapnode(cell.copy(), m, ret_dict, prefix.copy(), max_elements)
     
 
 

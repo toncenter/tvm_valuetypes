@@ -14,7 +14,7 @@ class CellData:
   def __init__(self):
     self.data = bitarray()
   def put_bool(self, element):
-    if(self.data.length()>=1023):
+    if(len(self.data)>=1023):
       raise Exception("Cell overflow")
     self.data.append(element)
   def put_arbitrary_uint(self, uint, bitsize):
@@ -48,7 +48,7 @@ class CellData:
       raise Exception("Not enough bits to concantenate cells: %d + %d"%(self.length(), another_cell_data.length()))
     self.data.extend(another_cell_data.data)
   def top_up(self):
-    l= self.data.length()
+    l= len(self.data)
     additional_bits = ceil(l/8) - l//8
     if(ceil(l/8)==128):
       additional_bits-=1
@@ -62,7 +62,7 @@ class CellData:
     cd.data = bitarray(self.data)
     return cd
   def length(self):
-    return self.data.length()
+    return len(self.data)
   def top_upped_bytes(self):
     t = self.copy()
     t.top_up()
@@ -76,6 +76,9 @@ class CellData:
         x = self.data.pop()
   def __eq__(self, another_cell_data):
     return (self.data.tobytes() == another_cell_data.data.tobytes()) and (self.length() == another_cell_data.length())
+
+  def __len__(self):
+    return self.length()
 
   def __repr__(self):
     if(self.length()%8):
@@ -116,7 +119,7 @@ class Cell:
   def descripter1(self):    
     return (len(self.refs) + self.is_special() * 8 + self.level() * 32).to_bytes(1, "big")
   def descripter2(self):
-    return ((self.data.length() // 8) + ceil(self.data.length() / 8)).to_bytes(1, "big")
+    return ((len(self.data) // 8) + ceil(len(self.data) / 8)).to_bytes(1, "big")
   def data_with_descriptors(self): 
     return self.descripter1() + self.descripter2() + self.data.top_upped_bytes()
   def repr(self):
@@ -147,13 +150,11 @@ class Cell:
   def build_indexes(self):
     def tree_walk(cell, topological_order_array, index_hashmap):
       cell_hash = cell.hash();
-      if cell_hash in index_hashmap: #duplicate cell
-        return topological_order_array, index_hashmap
       index_hashmap[cell_hash] = len(topological_order_array);
       topological_order_array.append((cell_hash, cell));
       for subcell in cell.refs:
         topological_order_array, index_hashmap = tree_walk(subcell, topological_order_array, index_hashmap);
-      return topological_order_array, index_hashmap
+      return topological_order_array, index_hashmap;
     return tree_walk(self, [], {})
     
   def serialize_boc(self, has_idx=True, hash_crc32=True, has_cache_bits=False, flags=0 ):
@@ -163,10 +164,9 @@ class Cell:
     s = cells_num.bit_length() # Minimal number of bits to represent reference (unused?)
     s_bytes = min(ceil(s/8), 1)
     full_size = 0;
-    cell_sizes = []
-    for (_hash, subcell) in topological_order:
-      cell_sizes[_hash] = subcell.serialize_for_boc_size(index_hashmap, s_bytes)
-      full_size += cell_sizes[_hash]
+    for cell_info in topological_order:
+      full_size += cell_info[1].serialize_for_boc_size(index_hashmap, s_bytes);
+    
     offset_bits = full_size.bit_length() # Minimal number of bits to encode offset
     offset_bytes =  min(ceil(offset_bits/8), 1)
     # has_idx 1bit, hash_crc32 1bit,  has_cache_bits 1bit, flags 2bit, s_bytes 3 bit
@@ -179,10 +179,8 @@ class Cell:
     ret += full_size.to_bytes(offset_bytes, "big")
     ret += b'\x00' # Root shoulh have index 0
     if has_idx:
-      current_offset = 0
       for (_hash, subcell) in topological_order:
-        current_offset += cell_sizes[_hash]
-        ret += (current_offset).to_bytes(offset_bytes, "big") # TODO check, probably offsets should be here
+        ret += (ceil(len(subcell.data)/8)).to_bytes(offset_bytes, "big") # TODO check, probably offsets should be here
     for (_hash, subcell) in topological_order: 
       ret += subcell.serialize_for_boc(index_hashmap, s_bytes)
     if(hash_crc32):
@@ -203,7 +201,7 @@ class Cell:
     for r in self.refs:
       ret['refs'].append(r.serialize_to_object())
     ret['data']['b64'] = codecs.decode(codecs.encode(self.data.data.tobytes(), 'base64'), 'utf8').replace('\n','')
-    ret['data']['len'] = self.data.length()
+    ret['data']['len'] = len(self.data)
     return ret
     
   def serialize_to_json(self):
@@ -296,7 +294,6 @@ def deserialize_boc(boc):
   elif prefix == lean_boc_magic_prefix_crc:
     (has_idx, hash_crc32, has_cache_bits, flags, size_bytes), boc = (1, 1, 0, 0, boc[0]), boc[1:]
     root_list = False
-  assert size_bytes==1, "BOC with size_bytes >1 are not supported" #TODO
   (off_bytes, cells_num, roots_num, absent_num), boc = (boc[0], boc[1], boc[2], boc[3]), boc[4:]
   tot_cells_size, boc = int.from_bytes(boc[0:off_bytes], "big"), boc[off_bytes:]
   if root_list:
@@ -319,7 +316,6 @@ def deserialize_boc(boc):
     cells.append(unfinished_cell)
   cells = substitute_indexes_with_cells(cells)
   # TODO hash_crc32?
-  # TODO multiroot bocs
   return cells[0]
   
 def deserialize_cell_from_object(data):

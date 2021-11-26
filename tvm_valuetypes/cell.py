@@ -163,12 +163,14 @@ class Cell:
     cells_num = len(topological_order);
     s = cells_num.bit_length() # Minimal number of bits to represent reference (unused?)
     s_bytes = min(ceil(s/8), 1)
-    full_size = 0;
-    for cell_info in topological_order:
-      full_size += cell_info[1].serialize_for_boc_size(index_hashmap, s_bytes);
+    full_size = 0
+    cell_sizes = []
+    for (_hash, subcell) in topological_order:
+      cell_sizes[_hash] = subcell.serialize_for_boc_size(index_hashmap, s_bytes)
+      full_size += cell_sizes[_hash]
     
     offset_bits = full_size.bit_length() # Minimal number of bits to encode offset
-    offset_bytes =  min(ceil(offset_bits/8), 1)
+    offset_bytes =  max(ceil(offset_bits/8), 1)
     # has_idx 1bit, hash_crc32 1bit,  has_cache_bits 1bit, flags 2bit, s_bytes 3 bit
     flag_byte = (has_idx*128 + hash_crc32*64 + has_cache_bits*32 + flags*8 + s_bytes).to_bytes(1,"big")
     ret = reach_boc_magic_prefix + flag_byte
@@ -179,8 +181,10 @@ class Cell:
     ret += full_size.to_bytes(offset_bytes, "big")
     ret += b'\x00' # Root shoulh have index 0
     if has_idx:
+      current_offset = 0
       for (_hash, subcell) in topological_order:
-        ret += (ceil(len(subcell.data)/8)).to_bytes(offset_bytes, "big") # TODO check, probably offsets should be here
+        current_offset += cell_sizes[_hash]
+        ret += (current_offset).to_bytes(offset_bytes, "big")
     for (_hash, subcell) in topological_order: 
       ret += subcell.serialize_for_boc(index_hashmap, s_bytes)
     if(hash_crc32):

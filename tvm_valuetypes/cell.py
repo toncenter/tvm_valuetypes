@@ -164,7 +164,7 @@ class Cell:
     s = cells_num.bit_length() # Minimal number of bits to represent reference (unused?)
     s_bytes = min(ceil(s/8), 1)
     full_size = 0
-    cell_sizes = []
+    cell_sizes = {}
     for (_hash, subcell) in topological_order:
       cell_sizes[_hash] = subcell.serialize_for_boc_size(index_hashmap, s_bytes)
       full_size += cell_sizes[_hash]

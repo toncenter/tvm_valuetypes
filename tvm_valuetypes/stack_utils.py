@@ -8,10 +8,12 @@ def render_tvm_element(element_type, element):
       return {'@type': 'tvm.stackEntryNumber', 'number': {'@type': 'tvm.numberDecimal', 'number': element}}
     elif element_type == "cell":
       element = deserialize_cell_from_json(element)
-      return {'@type': 'tvm.stackEntryCell', 'cell': {'@type': 'tvm.Cell', 'bytes': element.serialize_boc(has_idx=False)}}
+      element_data = codecs.decode(codecs.encode(element.serialize_boc(has_idx=False), 'base64'), 'utf-8').replace('\n', '')
+      return {'@type': 'tvm.stackEntryCell', 'cell': {'@type': 'tvm.Cell', 'bytes': element_data}}
     elif element_type == "slice":
       element = deserialize_cell_from_json(element)
-      return {'@type': 'tvm.stackEntrySlice', 'slice': {'@type': 'tvm.Slice', 'bytes': element.serialize_boc(has_idx=False)}}
+      element_data = codecs.decode(codecs.encode(element.serialize_boc(has_idx=False), 'base64'), 'utf-8').replace('\n', '')
+      return {'@type': 'tvm.stackEntrySlice', 'slice': {'@type': 'tvm.Slice', 'bytes': element_data}}
     else:
       raise NotImplemented()
 

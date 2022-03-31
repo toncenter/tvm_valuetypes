@@ -298,7 +298,11 @@ def deserialize_boc(boc):
   elif prefix == lean_boc_magic_prefix_crc:
     (has_idx, hash_crc32, has_cache_bits, flags, size_bytes), boc = (1, 1, 0, 0, boc[0]), boc[1:]
     root_list = False
-  (off_bytes, cells_num, roots_num, absent_num), boc = (boc[0], boc[1], boc[2], boc[3]), boc[4:]
+  off_bytes, boc = boc[0], boc[1:]
+  cells_num, boc = int.from_bytes(boc[0:size_bytes], "big"), boc[size_bytes:]
+  roots_num, boc = int.from_bytes(boc[0:size_bytes], "big"), boc[size_bytes:]
+  absent_num, boc = int.from_bytes(boc[0:size_bytes], "big"), boc[size_bytes:]
+  assert absent_num == 0
   tot_cells_size, boc = int.from_bytes(boc[0:off_bytes], "big"), boc[off_bytes:]
   if root_list:
     if roots_num > 1:

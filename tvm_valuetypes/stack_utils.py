@@ -14,6 +14,10 @@ def render_tvm_element(element_type, element):
       element = deserialize_cell_from_json(element)
       element_data = codecs.decode(codecs.encode(element.serialize_boc(has_idx=False), 'base64'), 'utf-8').replace('\n', '')
       return {'@type': 'tvm.stackEntrySlice', 'slice': {'@type': 'tvm.Slice', 'bytes': element_data}}
+    elif element_type == "tvm.Slice":
+      return {'@type': 'tvm.stackEntrySlice', 'slice': {'@type': 'tvm.Slice', 'bytes': element}}
+    elif element_type == "tvm.Cell":
+      return {'@type': 'tvm.stackEntryCell', 'cell': {'@type': 'tvm.Cell', 'bytes': element}}
     else:
       raise NotImplemented()
 

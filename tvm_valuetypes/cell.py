@@ -317,7 +317,7 @@ def deserialize_boc(boc):
     offsets = []
     for i in range(cells_num):
       o, boc = int.from_bytes(boc[0:off_bytes], "big"), boc[off_bytes:]
-      offset.append(o)
+      offsets.append(o)
   cells = []
   for i in range(cells_num):
     unfinished_cell, boc = deserialize_cell_data(boc, size_bytes)

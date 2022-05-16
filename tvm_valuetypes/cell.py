@@ -22,7 +22,9 @@ class CellData:
 
     def put_arbitrary_uint(self, uint, bitsize):
         if bitsize <= 0 or (2 ** bitsize - 1 < uint):
-            raise Exception("Not enough bits (%d) to encode integer (%d)" % (bitsize, uint))
+            raise Exception(
+                "Not enough bits (%d) to encode integer (%d)" %
+                (bitsize, uint))
         for i in range(bitsize, 0, -1):
             k = (2 ** (i - 1))
             if uint // k == 1:
@@ -40,7 +42,9 @@ class CellData:
                 self.put_bool(_int == -1)
                 return
             else:
-                raise Exception("Not enough bits (%d) to encode integer (%d)" % (bitsize, uint))
+                raise Exception(
+                    "Not enough bits (%d) to encode integer (%d)" %
+                    (bitsize, uint))
         if _int < 0:
             self.put_bool(1)
             s = 2 ** (bitsize - 1)
@@ -52,7 +56,8 @@ class CellData:
     def concatenate(self, another_cell_data):
         if self.length() + another_cell_data.length() > 1023:
             raise Exception(
-                "Not enough bits to concantenate cells: %d + %d" % (self.length(), another_cell_data.length()))
+                "Not enough bits to concantenate cells: %d + %d" %
+                (self.length(), another_cell_data.length()))
         self.data.extend(another_cell_data.data)
 
     def top_up(self):
@@ -89,7 +94,7 @@ class CellData:
 
     def __eq__(self, another_cell_data):
         return (self.data.tobytes() == another_cell_data.data.tobytes()) and (
-                self.length() == another_cell_data.length())
+            self.length() == another_cell_data.length())
 
     def __len__(self):
         return self.length()
@@ -131,17 +136,20 @@ class Cell:
         return max_depth
 
     def encoded_depth(self):
-        return (self.depth() // 256).to_bytes(1, "big") + (self.depth() % 256).to_bytes(1, "big")
+        return (self.depth() // 256).to_bytes(1, "big") + \
+            (self.depth() % 256).to_bytes(1, "big")
 
     def concatenate(self, another_cell):
         self.data.concatenate(another_cell.data)
         self.refs = self.refs + another_cell.refs
 
     def descripter1(self):
-        return (len(self.refs) + self.is_special() * 8 + self.level() * 32).to_bytes(1, "big")
+        return (len(self.refs) + self.is_special() *
+                8 + self.level() * 32).to_bytes(1, "big")
 
     def descripter2(self):
-        return ((len(self.data) // 8) + ceil(len(self.data) / 8)).to_bytes(1, "big")
+        return ((len(self.data) // 8) +
+                ceil(len(self.data) / 8)).to_bytes(1, "big")
 
     def data_with_descriptors(self):
         return self.descripter1() + self.descripter2() + self.data.top_upped_bytes()
@@ -164,7 +172,8 @@ class Cell:
         # it is serialization of the cell to be used in boc serialization
         ret = self.data_with_descriptors()
         if self.is_explicitly_stored_hashes():
-            raise NotImplementedError("Do not support explicitly stored hashes yet")
+            raise NotImplementedError(
+                "Do not support explicitly stored hashes yet")
         for k in self.refs:
             ret += (cells_index[k.hash()].to_bytes(ref_size, "big"))
         return ret
@@ -178,12 +187,18 @@ class Cell:
             index_hashmap[cell_hash] = len(topological_order_array)
             topological_order_array.append((cell_hash, cell))
             for subcell in cell.refs:
-                topological_order_array, index_hashmap = tree_walk(subcell, topological_order_array, index_hashmap)
+                topological_order_array, index_hashmap = tree_walk(
+                    subcell, topological_order_array, index_hashmap)
             return topological_order_array, index_hashmap
 
         return tree_walk(self, [], {})
 
-    def serialize_boc(self, has_idx=True, hash_crc32=True, has_cache_bits=False, flags=0):
+    def serialize_boc(
+            self,
+            has_idx=True,
+            hash_crc32=True,
+            has_cache_bits=False,
+            flags=0):
         # This is serialization of the cell to boc as root_cell
         topological_order, index_hashmap = self.build_indexes()
         cells_num = len(topological_order)
@@ -192,13 +207,20 @@ class Cell:
         full_size = 0
         cell_sizes = {}
         for (_hash, subcell) in topological_order:
-            cell_sizes[_hash] = subcell.serialize_for_boc_size(index_hashmap, s_bytes)
+            cell_sizes[_hash] = subcell.serialize_for_boc_size(
+                index_hashmap, s_bytes)
             full_size += cell_sizes[_hash]
 
         offset_bits = full_size.bit_length()  # Minimal number of bits to encode offset
         offset_bytes = max(ceil(offset_bits / 8), 1)
-        # has_idx 1bit, hash_crc32 1bit,  has_cache_bits 1bit, flags 2bit, s_bytes 3 bit
-        flag_byte = (has_idx * 128 + hash_crc32 * 64 + has_cache_bits * 32 + flags * 8 + s_bytes).to_bytes(1, "big")
+        # has_idx 1bit, hash_crc32 1bit,  has_cache_bits 1bit, flags 2bit,
+        # s_bytes 3 bit
+        flag_byte = (
+            has_idx * 128 +
+            hash_crc32 * 64 +
+            has_cache_bits * 32 +
+            flags * 8 +
+            s_bytes).to_bytes( 1, "big")
         ret = reach_boc_magic_prefix + flag_byte
         ret += offset_bytes.to_bytes(1, "big")
         ret += cells_num.to_bytes(offset_bytes, "big")
@@ -224,13 +246,20 @@ class Cell:
         return ret
 
     def __repr__(self):
-        return "<Cell refs_num: %d, data: %s>" % (len(self.refs), repr(self.data))
+        return "<Cell refs_num: %d, data: %s>" % (
+            len(self.refs), repr(self.data))
 
     def serialize_to_object(self):
         ret = {'data': {'b64': b'', 'len': 0}, 'refs': []}
         for r in self.refs:
             ret['refs'].append(r.serialize_to_object())
-        ret['data']['b64'] = codecs.decode(codecs.encode(self.data.data.tobytes(), 'base64'), 'utf8').replace('\n', '')
+        ret['data']['b64'] = codecs.decode(
+            codecs.encode(
+                self.data.data.tobytes(),
+                'base64'),
+            'utf8').replace(
+            '\n',
+            '')
         ret['data']['len'] = len(self.data)
         return ret
 
@@ -249,13 +278,15 @@ class Cell:
 def test_boc_serialization():
     c0 = Cell()
     res = c0.serialize_boc(has_idx=False)
-    reference_serialization_0 = bytes.fromhex("B5EE9C724101010100020000004CACB9CD")
+    reference_serialization_0 = bytes.fromhex(
+        "B5EE9C724101010100020000004CACB9CD")
     assert res == reference_serialization_0, "Wrong empty cell boc-serialization"
 
     c1 = Cell()
     c1.data.put_uint8(0)
     res = c1.serialize_boc(has_idx=False)
-    reference_serialization_1 = bytes.fromhex("B5EE9C7241010101000300000200D367DC41")
+    reference_serialization_1 = bytes.fromhex(
+        "B5EE9C7241010101000300000200D367DC41")
     assert res == reference_serialization_1, "Wrong <b 0 8 u, b> cell boc-serialization"
 
     c1 = Cell()
@@ -264,7 +295,8 @@ def test_boc_serialization():
     c2.data.put_uint8(73)
     c1.refs.append(c2)
     res = c1.serialize_boc(has_idx=False)
-    reference_serialization_2 = bytes.fromhex("B5EE9C72410102010007000102000100024995C5FE15")
+    reference_serialization_2 = bytes.fromhex(
+        "B5EE9C72410102010007000102000100024995C5FE15")
     assert res == reference_serialization_2, "Wrong '<b 0 8 u, <b 73 8 u, b> ref, b>' cell boc-serialization"
 
 
@@ -273,7 +305,8 @@ def parse_flags(serialization):
     has_idx, hash_crc32, has_cache_bits = header_byte & 128, header_byte & 64, header_byte & 32
     header_byte %= 32
     flags, size_bytes = header_byte >> 3, header_byte % 8
-    return (has_idx, hash_crc32, has_cache_bits, flags, size_bytes), serialization
+    return (has_idx, hash_crc32, has_cache_bits,
+            flags, size_bytes), serialization
 
 
 def deserialize_cell_data(ser, index_size):
@@ -281,12 +314,14 @@ def deserialize_cell_data(ser, index_size):
     level, d1 = (d1 // 32), d1 % 32
     h, d1 = (d1 // 16), d1 % 16
     if h > 0:
-        raise NotImplementedError("Cell with explicit hash references are not supported yet")
+        raise NotImplementedError(
+            "Cell with explicit hash references are not supported yet")
     s, r = (d1 // 8), d1 % 8
     if s > 0:
         raise NotImplementedError("Exoctic cell ware not supported yet")
     if r > 4:
-        raise NotImplementedError("Cell with explicit hash references are not supported yet (r>4)")
+        raise NotImplementedError(
+            "Cell with explicit hash references are not supported yet (r>4)")
     if d2 % 2:
         data_size = (d2 + 1) // 2
         not_full = True
@@ -297,7 +332,8 @@ def deserialize_cell_data(ser, index_size):
     c = Cell()
     c.data.from_bytes(cell_data, top_upped=not_full)
     for i in range(r):
-        ref_index, ser = int.from_bytes(ser[:index_size], "big"), ser[index_size:]
+        ref_index, ser = int.from_bytes(
+            ser[:index_size], "big"), ser[index_size:]
         c.refs.append(ref_index)
     return c, ser
 
@@ -310,30 +346,41 @@ def substitute_indexes_with_cells(cells):
 
 
 def deserialize_boc(boc):
-    bocs_prefixes = [reach_boc_magic_prefix, lean_boc_magic_prefix, lean_boc_magic_prefix_crc]
+    bocs_prefixes = [
+        reach_boc_magic_prefix,
+        lean_boc_magic_prefix,
+        lean_boc_magic_prefix_crc]
     prefix, boc = boc[:4], boc[4:]
     assert (prefix in bocs_prefixes), "Unknown boc prefix"
     if prefix == reach_boc_magic_prefix:
-        (has_idx, hash_crc32, has_cache_bits, flags, size_bytes), boc = parse_flags(boc)
+        (has_idx, hash_crc32, has_cache_bits,
+         flags, size_bytes), boc = parse_flags(boc)
         root_list = True
     elif prefix == lean_boc_magic_prefix:
-        (has_idx, hash_crc32, has_cache_bits, flags, size_bytes), boc = (1, 0, 0, 0, boc[0]), boc[1:]
+        (has_idx, hash_crc32, has_cache_bits, flags,
+         size_bytes), boc = (1, 0, 0, 0, boc[0]), boc[1:]
         root_list = False
     elif prefix == lean_boc_magic_prefix_crc:
-        (has_idx, hash_crc32, has_cache_bits, flags, size_bytes), boc = (1, 1, 0, 0, boc[0]), boc[1:]
+        (has_idx, hash_crc32, has_cache_bits, flags,
+         size_bytes), boc = (1, 1, 0, 0, boc[0]), boc[1:]
         root_list = False
     off_bytes, boc = boc[0], boc[1:]
     cells_num, boc = int.from_bytes(boc[0:size_bytes], "big"), boc[size_bytes:]
     roots_num, boc = int.from_bytes(boc[0:size_bytes], "big"), boc[size_bytes:]
-    absent_num, boc = int.from_bytes(boc[0:size_bytes], "big"), boc[size_bytes:]
+    absent_num, boc = int.from_bytes(
+        boc[0:size_bytes], "big"), boc[size_bytes:]
     assert absent_num == 0
-    tot_cells_size, boc = int.from_bytes(boc[0:off_bytes], "big"), boc[off_bytes:]
+    tot_cells_size, boc = int.from_bytes(
+        boc[0:off_bytes], "big"), boc[off_bytes:]
     if root_list:
         if roots_num > 1:
-            raise NotImplementedError("Only 1 root supported for now (%d)" % roots_num)
+            raise NotImplementedError(
+                "Only 1 root supported for now (%d)" %
+                roots_num)
         roots_indexes = []
         for i in range(roots_num):
-            ri, boc = int.from_bytes(boc[0:size_bytes], "big"), boc[size_bytes:]
+            ri, boc = int.from_bytes(
+                boc[0:size_bytes], "big"), boc[size_bytes:]
             roots_indexes.append(ri)
     else:
         roots_indexes = [0]
@@ -388,7 +435,8 @@ def test_boc_deserialization():
 
 def Slice(Cell):
     def __repr__(self):
-        return "<Slice refs_num: %d, data: %s>" % (len(self.refs), repr(self.data))
+        return "<Slice refs_num: %d, data: %s>" % (
+            len(self.refs), repr(self.data))
 
     def __init__(self, cell):
         self.data = cell.data.copy()

@@ -67,8 +67,18 @@ def deser_hashmapnode(cell, m, ret_dict, prefix, max_elements):
         l_prefix, r_prefix = prefix.copy(), prefix.copy()
         l_prefix.append(False)
         r_prefix.append(True)
-        parse_hashmap(cell.refs[0].copy(), m - 1, ret_dict, l_prefix, max_elements)
-        parse_hashmap(cell.refs[1].copy(), m - 1, ret_dict, r_prefix, max_elements)
+        parse_hashmap(
+            cell.refs[0].copy(),
+            m - 1,
+            ret_dict,
+            l_prefix,
+            max_elements)
+        parse_hashmap(
+            cell.refs[1].copy(),
+            m - 1,
+            ret_dict,
+            r_prefix,
+            max_elements)
 
 
 def parse_hashmap(cell, bitlength, ret_dict, prefix, max_elements=10000):
@@ -97,5 +107,5 @@ def test_parse_hashmap():
     dict1_cell = deserialize_boc(test_dict1)
     parsed_dict = {}
     parse_hashmap(dict1_cell, 32, parsed_dict)
-    print(
-        parsed_dict)  # assert parsed_dict == {'00000000': bitarray('00000000'), '00000001': bitarray('00000000'), '00000011': bitarray('11111111'), '00001000': bitarray('01100100'), '00111111': bitarray('01111111'), '11111111': bitarray('00000000')}
+    # assert parsed_dict == {'00000000': bitarray('00000000'), '00000001': bitarray('00000000'), '00000011': bitarray('11111111'), '00001000': bitarray('01100100'), '00111111': bitarray('01111111'), '11111111': bitarray('00000000')}
+    print(parsed_dict)

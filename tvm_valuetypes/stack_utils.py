@@ -42,7 +42,7 @@ def render_tvm_element(element_type, element):
                 '@type': 'tvm.Cell',
                 'bytes': element}}
     else:
-        raise NotImplemented()
+        raise NotImplementedError()
 
 
 def render_tvm_stack(stack_data):

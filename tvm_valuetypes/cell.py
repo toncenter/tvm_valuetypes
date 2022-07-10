@@ -44,7 +44,7 @@ class CellData:
             else:
                 raise Exception(
                     "Not enough bits (%d) to encode integer (%d)" %
-                    (bitsize, uint))
+                    (bitsize, _int))
         if _int < 0:
             self.put_bool(1)
             s = 2 ** (bitsize - 1)
@@ -112,8 +112,11 @@ class Cell:
     def __init__(self):
         self.data = CellData()
         self.refs = []
+        self.special = False
 
     def level(self):
+        if self.is_special():
+            raise NotImplementedError('Calculating level not implemented for special cells')
         max_level = 0
         for k in self.refs:
             if k.level() > max_level:
@@ -121,7 +124,7 @@ class Cell:
         return max_level
 
     def is_special(self):
-        return 0
+        return self.special
 
     def is_explicitly_stored_hashes(self):
         return 0
@@ -243,6 +246,7 @@ class Cell:
         ret = Cell()
         ret.data = self.data.copy()
         ret.refs = self.refs.copy()
+        ret.special = self.special
         return ret
 
     def __repr__(self):
@@ -250,7 +254,7 @@ class Cell:
             len(self.refs), repr(self.data))
 
     def serialize_to_object(self):
-        ret = {'data': {'b64': b'', 'len': 0}, 'refs': []}
+        ret = {'data': {'b64': b'', 'len': 0}, 'refs': [], 'special': False}
         for r in self.refs:
             ret['refs'].append(r.serialize_to_object())
         ret['data']['b64'] = codecs.decode(
@@ -261,6 +265,7 @@ class Cell:
             '\n',
             '')
         ret['data']['len'] = len(self.data)
+        ret['special'] = self.is_special()
         return ret
 
     def serialize_to_json(self):
@@ -317,8 +322,6 @@ def deserialize_cell_data(ser, index_size):
         raise NotImplementedError(
             "Cell with explicit hash references are not supported yet")
     s, r = (d1 // 8), d1 % 8
-    if s > 0:
-        raise NotImplementedError("Exoctic cell ware not supported yet")
     if r > 4:
         raise NotImplementedError(
             "Cell with explicit hash references are not supported yet (r>4)")
@@ -330,6 +333,7 @@ def deserialize_cell_data(ser, index_size):
         not_full = False
     cell_data, ser = ser[:data_size], ser[data_size:]
     c = Cell()
+    c.special = s > 0
     c.data.from_bytes(cell_data, top_upped=not_full)
     for i in range(r):
         ref_index, ser = int.from_bytes(
@@ -405,6 +409,7 @@ def deserialize_cell_from_object(data):
     cell.data.data = cell.data.data[:data['data']['len']]
     for r in data['refs']:
         cell.refs.append(deserialize_cell_from_object(r))
+    cell.special = data['special']
     return cell
 
 

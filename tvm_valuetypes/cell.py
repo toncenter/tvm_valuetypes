@@ -12,12 +12,14 @@ lean_boc_magic_prefix_crc = b'\xac\xc3\xa7\x28'
 
 
 class CellData:
-    def __init__(self):
+    def __init__(self, max_length=1023):
         self.data = bitarray()
+        self.max_length = max_length
 
     def put_bool(self, element):
-        if len(self.data) >= 1023:
-            raise Exception("Cell overflow")
+        if not (self.max_length is None):
+            if len(self.data) >= self.max_length:
+                raise Exception("Cell overflow")
         self.data.append(element)
 
     def put_arbitrary_uint(self, uint, bitsize):
@@ -35,6 +37,10 @@ class CellData:
 
     def put_uint8(self, uint):
         self.put_arbitrary_uint(uint, 8)
+
+    def put_bytes(self, _bytes):
+        for byte in _bytes:
+            self.put_uint8(byte)
 
     def put_arbitrary_int(self, _int, bitsize):
         if bitsize == 1:
@@ -146,16 +152,16 @@ class Cell:
         self.data.concatenate(another_cell.data)
         self.refs = self.refs + another_cell.refs
 
-    def descripter1(self):
+    def refs_descriptor(self):
         return (len(self.refs) + self.is_special() *
                 8 + self.level() * 32).to_bytes(1, "big")
 
-    def descripter2(self):
+    def bits_descriptor(self):
         return ((len(self.data) // 8) +
                 ceil(len(self.data) / 8)).to_bytes(1, "big")
 
     def data_with_descriptors(self):
-        return self.descripter1() + self.descripter2() + self.data.top_upped_bytes()
+        return self.refs_descriptor() + self.bits_descriptor() + self.data.top_upped_bytes()
 
     def repr(self):
         ret = self.data_with_descriptors()
@@ -178,20 +184,45 @@ class Cell:
             raise NotImplementedError(
                 "Do not support explicitly stored hashes yet")
         for k in self.refs:
-            ret += (cells_index[k.hash()].to_bytes(ref_size, "big"))
+            ref_hash = k.hash()
+            ref_index_int = cells_index[ref_hash]
+            ref_index_hex = f"{ref_index_int:x}"
+            if len(ref_index_hex) % 2:
+                ref_index_hex = "0" + ref_index_hex
+            reference = bytes.fromhex(ref_index_hex)
+            ret += reference
         return ret
 
     def serialize_for_boc_size(self, cells_index, ref_size):
         return len(self.serialize_for_boc(cells_index, ref_size))
 
     def build_indexes(self):
-        def tree_walk(cell, topological_order_array, index_hashmap):
+        def move_to_end(index_hashmap, topological_order_array, target):
+            target_index = index_hashmap[target]
+            for hash in index_hashmap:
+                if index_hashmap[hash] > target_index:
+                    index_hashmap[hash] -= 1
+            index_hashmap[target] = len(topological_order_array) - 1
+            data = topological_order_array[target_index]
+            topological_order_array.append(data)
+            for subcell in data[1].refs:
+                index_hashmap, topological_order_array = move_to_end(index_hashmap,
+                                                                topological_order_array, subcell.hash())
+            return index_hashmap, topological_order_array
+
+        def tree_walk(cell, topological_order_array, index_hashmap, parent_hash=None):
             cell_hash = cell.hash()
+            if cell_hash in index_hashmap:
+                if parent_hash:
+                    if index_hashmap[parent_hash] > index_hashmap[cell_hash]:
+                        index_hashmap, topological_order_array = \
+                            move_to_end(index_hashmap, topological_order_array, cell_hash)
+                return topological_order_array, index_hashmap
             index_hashmap[cell_hash] = len(topological_order_array)
             topological_order_array.append((cell_hash, cell))
             for subcell in cell.refs:
                 topological_order_array, index_hashmap = tree_walk(
-                    subcell, topological_order_array, index_hashmap)
+                    subcell, topological_order_array, index_hashmap, cell_hash)
             return topological_order_array, index_hashmap
 
         return tree_walk(self, [], {})
@@ -218,29 +249,30 @@ class Cell:
         offset_bytes = max(ceil(offset_bits / 8), 1)
         # has_idx 1bit, hash_crc32 1bit,  has_cache_bits 1bit, flags 2bit,
         # s_bytes 3 bit
-        flag_byte = (
-            has_idx * 128 +
-            hash_crc32 * 64 +
-            has_cache_bits * 32 +
-            flags * 8 +
-            s_bytes).to_bytes( 1, "big")
-        ret = reach_boc_magic_prefix + flag_byte
-        ret += offset_bytes.to_bytes(1, "big")
-        ret += cells_num.to_bytes(offset_bytes, "big")
-        ret += (1).to_bytes(1, "big")  # only one root in this implementation
-        ret += b'\x00'  # complete BOCs only
-        ret += full_size.to_bytes(offset_bytes, "big")
-        ret += b'\x00'  # Root shoulh have index 0
+        serialization = CellData(max_length=None)
+        serialization.put_bytes(reach_boc_magic_prefix)
+        serialization.put_arbitrary_uint(bool(has_idx), 1)
+        serialization.put_arbitrary_uint(bool(hash_crc32), 1)
+        serialization.put_arbitrary_uint(bool(has_cache_bits), 1)
+        serialization.put_arbitrary_uint(flags, 2)
+        serialization.put_arbitrary_uint(s_bytes, 3)
+        serialization.put_uint8(offset_bytes)
+        serialization.put_arbitrary_uint(cells_num, s_bytes * 8)
+        serialization.put_arbitrary_uint(1, s_bytes * 8)  # One root for now
+        serialization.put_arbitrary_uint(0, s_bytes * 8)  # Complete BOCs only
+        serialization.put_arbitrary_uint(full_size, offset_bytes * 8)
+        serialization.put_arbitrary_uint(0, s_bytes * 8)  # Root should have index 0
         if has_idx:
-            current_offset = 0
             for (_hash, subcell) in topological_order:
-                current_offset += cell_sizes[_hash]
-                ret += current_offset.to_bytes(offset_bytes, "big")
+                serialization.put_arbitrary_uint(cell_sizes[_hash], offset_bytes * 8)
         for (_hash, subcell) in topological_order:
-            ret += subcell.serialize_for_boc(index_hashmap, s_bytes)
+            refcell_ser = subcell.serialize_for_boc(index_hashmap, offset_bytes)
+            for byte in refcell_ser:
+                serialization.put_uint8(byte)
+        ser_arr = serialization.top_upped_bytes()
         if hash_crc32:
-            ret += crc32c(ret).to_bytes(4, "little")
-        return ret
+            ser_arr += crc32c(ser_arr).to_bytes(4, "little")
+        return ser_arr
 
     def copy(self):
         ret = Cell()

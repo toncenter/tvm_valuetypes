@@ -237,7 +237,7 @@ class Cell:
         topological_order, index_hashmap = self.build_indexes()
         cells_num = len(topological_order)
         s = cells_num.bit_length()  # Minimal number of bits to represent reference (unused?)
-        s_bytes = min(ceil(s / 8), 1)
+        s_bytes = max(ceil(s / 8), 1)
         full_size = 0
         cell_sizes = {}
         for (_hash, subcell) in topological_order:

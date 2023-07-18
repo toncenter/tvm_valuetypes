@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 setuptools.setup(
     name='tvm_valuetypes',
-    version='0.0.10',
+    version='0.0.11',
     author="Emelyanenko Kirill",
     author_email="emelyanenko.kirill@gmail.com",
     description="Collection of utils for handling Telegram Open Network Virtual Machine value types",

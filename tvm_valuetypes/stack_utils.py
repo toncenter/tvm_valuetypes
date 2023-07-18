@@ -65,10 +65,13 @@ def serialize_tvm_element(t):
     if t["@type"] == "tvm.stackEntryNumber":
         return ["num", hex(int(t["number"]["number"]))]
     elif t["@type"] == "tvm.stackEntrySlice":
-        data = codecs.encode(t["cell"]["bytes"], 'utf8')
+        data = codecs.encode(t["slice"]["bytes"], 'utf8')
         data = codecs.decode(data, 'base64')
         s = Slice(deserialize_boc(data))
-        return ["cell", {'bytes': t["cell"]["bytes"],
+
+        # For backward compatibility we return `cell` here. 
+        # TODO: replace with `slice`
+        return ["cell", {'bytes': t["slice"]["bytes"],       
                          'object': s.serialize_to_object()}]
     elif t["@type"] == "tvm.stackEntryCell":
         data = codecs.encode(t["cell"]["bytes"], 'utf8')

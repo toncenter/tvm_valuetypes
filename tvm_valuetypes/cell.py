@@ -470,7 +470,7 @@ def test_boc_deserialization():
     assert dc1.refs[0].refs[0].data == c3.data
 
 
-def Slice(Cell):
+class Slice(Cell):
     def __repr__(self):
         return "<Slice refs_num: %d, data: %s>" % (
             len(self.refs), repr(self.data))
@@ -478,3 +478,5 @@ def Slice(Cell):
     def __init__(self, cell):
         self.data = cell.data.copy()
         self.refs = cell.refs.copy()
+        assert cell.special == False
+        self.special = cell.special

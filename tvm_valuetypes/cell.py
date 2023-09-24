@@ -172,9 +172,35 @@ class Cell:
         return ret
 
     def hash(self):
+        return self._recursive_hash()[2]
+
+    def _recursive_hash(self):
+        # retutrns tuple (level, depth, hash) of current cell
+        if self.is_special():
+            raise NotImplementedError('Calculating level not implemented for special cells')
         hasher = sha256()
-        hasher.update(self.repr())
-        return hasher.digest()
+        if len(self.refs) == 0:
+            self_data = b'\x00' + self.bits_descriptor() + self.data.top_upped_bytes()
+            hasher.update(self_data)
+            # level and depth is zero
+            return (0, 0, hasher.digest())
+        else:
+            children = [ref._recursive_hash() for ref in self.refs]
+            max_level = 0
+            max_depth = 0
+            depth_block = b''
+            hashes_block = b''
+            for depth, level, ref_hash in children:
+                if level > max_level:
+                    max_level = level
+                if depth > max_depth:
+                    max_depth = depth
+                depth_block += (depth // 256).to_bytes(1, "big") + (depth % 256).to_bytes(1, "big")
+                hashes_block += ref_hash
+
+            self_data = (len(self.refs) + max_level * 32).to_bytes(1, "big") + self.bits_descriptor() + self.data.top_upped_bytes()
+            hasher.update(self_data + depth_block + hashes_block)
+            return (max_depth + 1, max_level, hasher.digest())
 
     def serialize_for_boc(self, cells_index, ref_size):
         # This is not serialization of the cell as boc with this cell as root_cell
@@ -335,6 +361,12 @@ def test_boc_serialization():
     reference_serialization_2 = bytes.fromhex(
         "B5EE9C72410102010007000102000100024995C5FE15")
     assert res == reference_serialization_2, "Wrong '<b 0 8 u, <b 73 8 u, b> ref, b>' cell boc-serialization"
+
+def test_cell_hash():
+    cell_data = 'te6ccsEBFwEAYAAEBQQFBQQFBAQEBAQEBAQEBAQFBAQEAwECyQEBBMsXAgECEgMBBMsXBAEEywcF\nAQIUBgEEywcHAQIBCAECJQkBAsgKAQKhCwECAQwBAiENAQIiDgECqA8BAgEQAQIhEQECARIBBIAD\nEwECqBQBAgEVAQIhFgACIX1S8I0='
+    cell_boc = codecs.decode(codecs.encode(cell_data, 'utf8'), 'base64')
+    cell = deserialize_boc(cell_boc)
+    assert 'MIrkspKfhLvHwcH+yryp0gZZR3vjKOYQ5VTAbqF8zB4=\n' == codecs.decode(codecs.encode(cell.hash(), 'base64'), 'utf-8')
 
 
 def parse_flags(serialization):
